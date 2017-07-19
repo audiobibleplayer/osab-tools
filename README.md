@@ -1,5 +1,5 @@
 # OSAB - the Open Source Audio Bible player
-## audiobibleplayer.org
+## [audiobibleplayer.org](http://audiobibleplayer.org/)
 #### Copyright (C) 2011-2017 Steven R. Patrick
 
 OSAB is a design for a portable audio Bible player released under the MIT Licence in the hope that it will be used by others worldwide to produce and distribute portable audio players that are specifically designed to share God's word with those who need to hear.
