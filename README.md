@@ -228,7 +228,7 @@ BOOK
 #### usage
 `vs-chap` generates a content index file of the above format if the files are named according to the convention described above.  Use it as follows:
 ```shell
-vs-chap &lt;directory&gt;
+vs-chap <directory>
 ```
 where the directory contains the ogg files or is the beginning of a path to a directory containing the ogg files.
 
@@ -236,7 +236,7 @@ The output is a file named `content.txt`.  It is best to rename it appropriately
 
 It can also be used on multiple directories like so:
 ```shell
-vs-chap &lt;directory1&gt; &lt;directory2&gt; &lt;directory3&gt;...
+vs-chap <directory1> <directory2> <directory3>...
 ```
 
 The content index files can easily be concatenated:
@@ -283,7 +283,7 @@ From both the above techniques it can be seen that the device name for the micro
 
 3. The basic form of using the script is:
 ```shell
-upload &lt;device_name&gt; &lt;content_file&gt;
+upload <device_name> <content_file>
 ```
 
    For example:
