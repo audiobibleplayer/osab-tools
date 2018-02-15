@@ -71,7 +71,7 @@ The Ogg encoded file for the Third Epistle of John could be:
 ### toogg
 To assist in conversion from other file formats (e.g. wav, mp3, wma, etc) to ogg, a PERL script called `toogg` is provided.
 
-#### usage
+#### Usage
 1. Make a processing directory for processing the audio files - e.g.:
 ```shell
 mkdir english-kjv
@@ -225,7 +225,7 @@ BOOK
 /some_path/66-revelation-022.ogg
 ```
 
-#### usage
+#### Usage
 `vs-chap` generates a content index file of the above format if the files are named according to the convention described above.  Use it as follows:
 ```shell
 vs-chap <directory>
@@ -247,7 +247,18 @@ cat Mandarin-CUV.txt English-KJV.txt Bible-study.txt Hymns.txt > Custom-content.
 ### upload
 This is a PERL script that uses **makemenu** to read the content index file, generate a menu file called `menu.mnu`, copy `menu.mnu` along with all the content ogg files to a microSD card.
 
-#### usage
+#### Warning
+Use this tool carefully as you can easily destroy all your data on a system disk or external harddrive or USB disk if you select the wrong target disk.
+Use at your own risk!
+
+#### Group membership
+Make sure that the linux user that uses this tool is a member of the `disk` group so that it can have write access to disks on your system:
+```shell
+sudo usermod -aG disk <your_username>
+```
+Log out and back in again for your group membership to be applied.
+
+#### Usage
 1. Insert the microSD card into the Linux machine's card reader.
 
 2. Check the device name assigned to the microSD card using `dmesg`:
