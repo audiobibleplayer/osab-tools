@@ -107,7 +107,7 @@ if (-b "/dev/$kname") {
 
     my $starttime = time;
 
-    open my $result_fh, "/bin/sudo /usr/local/bin/makemenu $chapfile /mnt/$kname |";
+    open my $result_fh, "/bin/sudo /usr/local/bin/makemenu -c $chapfile -m /mnt/$kname -u|";
     while (<$result_fh>) {
         print $_;
     }

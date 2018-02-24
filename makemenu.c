@@ -2,7 +2,7 @@
  * makemenu.c - make menu.mnu from audio files for
  *              OSAB - the Open Source Audio Bible player
  *
- * Copyright (C) 2001-2017 Steven R. Patrick (http://audiobibleplayer.org)
+ * Copyright (C) 2001-2018 Steven R. Patrick (http://audiobibleplayer.org)
  *
  * Parts of this code are derived from VLSI's audio book sample code - http://vlsi.fi
  *
@@ -24,15 +24,19 @@
 #include <stdint.h>
 #include <dirent.h>
 
-/* Max characters in base filename (without extension */
+/* Max characters in base filename (without extension) */
 #define FNAME_MAX 10
 
 /* Max characters in path to menu.mnu */
 //#define PATH_MAX 4096 // defined in linux/limits.h
 
+#define MENU_FILE_NAME      "menu.mnu"
+
 #define EXIT_OK             0
-#define EXIT_FILE_ERROR     1
-#define EXIT_MEM_ERROR      2
+#define ERROR_FILE          1
+#define ERROR_MEM           2
+#define ERROR_PATH_LENGTH   3
+#define ERROR_OPTIONS       4
 
 #define FALSE 0
 #define TRUE !FALSE
@@ -96,7 +100,7 @@ unsigned long read_chapter_file(char* chapters_file, uint32_t* unopenable_files)
     chapter_txt_file = fopen(chapters_file, "r");
     if (chapter_txt_file == NULL) {
         fprintf(stdout, "ERROR: cannot open file named %s\r\n", chapters_file);
-        exit(EXIT_FILE_ERROR);
+        exit(ERROR_FILE);
     }
 
     testament = (void *) malloc(sizeof(size_t));
@@ -132,7 +136,7 @@ unsigned long read_chapter_file(char* chapters_file, uint32_t* unopenable_files)
                     if (!p) {
                         error_handler("Failed to reallocate memory for testament", 1);
                         free(testament);
-                        exit(EXIT_MEM_ERROR);
+                        exit(ERROR_MEM);
                     } else {
                         testament = p;
                     }
@@ -146,7 +150,7 @@ unsigned long read_chapter_file(char* chapters_file, uint32_t* unopenable_files)
                 if (!p) {
                     error_handler("Failed to reallocate memory for testament[testament_count].", 2);
                     free(testament[testament_count]);
-                    exit(EXIT_MEM_ERROR);
+                    exit(ERROR_MEM);
                 } else {
                     testament[testament_count] = p;
                 }
@@ -263,7 +267,7 @@ void touch_files(unsigned int num_files, char *mnt_path) {
         chap_file = fopen(path_to_file, "wbx");
         if (NULL == chap_file) {
             fprintf(stdout, "Cannot create file %s - ", path_to_file);
-            exit(EXIT_FILE_ERROR);
+            exit(ERROR_FILE);
         }
         fclose(chap_file);
     }
@@ -281,7 +285,7 @@ void copy_files(char *chapter_file, char *mnt_path) {
     chap_file = fopen(chapter_file, "r");
     if (NULL == chap_file) {
         fprintf(stdout, "ERROR, cannot open chapter file %s\n", chapter_file);
-        exit(EXIT_FILE_ERROR);
+        exit(ERROR_FILE);
     }
 
     while (fgets(src_fname, PATH_MAX, chap_file)) {
@@ -303,12 +307,12 @@ void copy_files(char *chapter_file, char *mnt_path) {
                     dst_file = fopen(dst_fname, "wb");
                     if (NULL == dst_file) {
                         fprintf(stdout, "\nERROR: cannot open destination file %s\a\n\n", dst_fname);
-                        exit(EXIT_FILE_ERROR);
+                        exit(ERROR_FILE);
                     }
                     src_file = fopen(src_fname, "rb");
                     if (NULL == src_file) {
                         fprintf(stdout, "\nERROR: cannot open source file %s\a\n\n", src_fname);
-                        exit(EXIT_FILE_ERROR);
+                        exit(ERROR_FILE);
                     }
                     fseek(src_file, 0, SEEK_END);
                     file_size = ftell(src_file);
@@ -316,7 +320,7 @@ void copy_files(char *chapter_file, char *mnt_path) {
                     file_buffer = malloc(file_size);
                     if (NULL == file_buffer) {
                         fprintf(stdout, "\nERROR: cannot allocate memory for file buffer\a\n\n");
-                        exit(EXIT_MEM_ERROR);
+                        exit(ERROR_MEM);
                     }
                     fread(file_buffer, 1, file_size, src_file);
                     fwrite(file_buffer, 1, file_size, dst_file);
@@ -334,40 +338,42 @@ void copy_files(char *chapter_file, char *mnt_path) {
     if (chap_file) fclose(chap_file);
 }
 
-/*********************************** Main ***********************************/
-int main(int argc, char *argv[]) {
-    FILE *menu_file;
-    int tst, menu_size;
-    size_t path_length;
+
+void check_chapters(char* chapter_file) {
     unsigned long tot_size;
-    char mnt_path[PATH_MAX] = { 0 }, menu_path[PATH_MAX] = { 0 };
-    struct MENUENTRY *menu;
-
-    if (argc != 3) {
-        printf("Build date %s - Usage: %s <chapter_file> <mount_point>\n", __DATE__, argv[0]);
-        exit(EXIT_OK);
-    }
-
     uint32_t unopenable_files = 0;
-    tot_size = read_chapter_file(argv[1], &unopenable_files);
+    tot_size = read_chapter_file(chapter_file, &unopenable_files);
     if (unopenable_files) {
-        fprintf(stdout, "\nERROR: there are %d files listed in %s that cannot be opened for reading.\a\n\n", unopenable_files, argv[1]);
-        exit(EXIT_FILE_ERROR);
+        fprintf(stdout, "\nERROR: there are %d files listed in %s that cannot be opened for reading.\a\n\n", unopenable_files, chapter_file);
+        exit(ERROR_FILE);
+    }
+}
+
+
+void upload(char* mnt_path, char* chapter_file) {
+    size_t path_length;
+    char menu_path[PATH_MAX] = { 0 };
+    struct MENUENTRY *menu;
+    int tst, menu_size;
+    FILE *menu_file;
+
+    check_chapters(chapter_file);
+
+    path_length = strnlen(mnt_path, PATH_MAX);
+    if (path_length > PATH_MAX - strlen(MENU_FILE_NAME) - 3) {
+      fprintf(stdout, "\nERROR: Path length for mount point is too long.");
+      exit(ERROR_PATH_LENGTH);
     }
 
-    print_testament_array();
-
-    strncpy(mnt_path, argv[2], PATH_MAX);
-    path_length = strnlen(mnt_path, PATH_MAX);
     if (mnt_path[path_length - 1] != SLASH) {
         mnt_path[path_length] = SLASH;
         mnt_path[path_length + 1] = 0;
     }
 
     strncpy(menu_path, mnt_path, PATH_MAX);
-    strncat(menu_path, "menu.mnu", PATH_MAX);
+    strncat(menu_path, MENU_FILE_NAME, PATH_MAX);
 
-    {   /*create the folder when it not exist*/
+    {   /*create dir when it does not exist*/
         DIR *dirh;
         dirh = opendir(mnt_path);
         if (dirh == NULL) {
@@ -377,7 +383,7 @@ int main(int argc, char *argv[]) {
             if(mkdir(mnt_path, S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) == -1) {
 #endif
                 printf("\nERROR: Cannot create directory %s\n", mnt_path);
-                exit(EXIT_FILE_ERROR);
+                exit(ERROR_FILE);
             }
         }
         else closedir(dirh);
@@ -386,16 +392,16 @@ int main(int argc, char *argv[]) {
     menu = malloc(sizeof(struct MENUENTRY) * entries_in_menu());
     if (NULL == menu) {
         fprintf(stdout, "\nERROR: cannot allocate memory for menu.\n");
-        exit(EXIT_MEM_ERROR);
+        exit(ERROR_MEM);
     }
 
     menu_size = mkmnu(menu);
-    printf("Size of menu.mnu is %d\n", menu_size);
+    printf("Size of MENU_FILE_NAME is %d\n", menu_size);
 
     menu_file = fopen(menu_path, "wb");
     if (menu_file == NULL) {    
         fprintf(stdout, "\nERROR: cannot open %s\n", menu_path);
-        exit(EXIT_FILE_ERROR);
+        exit(ERROR_FILE);
     }
     fclose(menu_file);
 
@@ -406,7 +412,7 @@ int main(int argc, char *argv[]) {
     fwrite(menu, 1, menu_size, menu_file);
     fclose(menu_file);
 
-    copy_files(argv[1], mnt_path);
+    copy_files(chapter_file, mnt_path);
 
     printf("Done copying files to SD card.\n");
 
@@ -417,6 +423,64 @@ int main(int argc, char *argv[]) {
         if(testament[tst]) free(testament[tst]);
     }
     if (testament) free(testament);
+}
+
+
+/*********************************** Main ***********************************/
+int main(int argc, char *argv[]) {
+    char mnt_path[PATH_MAX] = { 0 };
+    char chapter_file[PATH_MAX] = { 0 };
+    int option;
+
+    const char *usage = "Usage... \nUpload with:\nmakemenu -c <chapter_file> -m <mount_point> -u\n\nVerify with:\nmakemenu -c <chapter_file> -m <mount_point> -v\n";
+
+    if (argc < 2) {
+        fprintf(stdout, usage);
+        exit(EXIT_OK);
+    }
+
+	  while ((option = getopt(argc, argv, "bc:m:puv")) != -1) {
+      switch(option) {
+        case 'b':
+          printf("Build date: %s\n", __DATE__);
+          break;
+
+        case 'c':
+          snprintf(chapter_file, PATH_MAX, optarg);
+          printf("chapter_file = %s\n", chapter_file);
+          break;
+
+        case 'm':
+          snprintf(mnt_path, PATH_MAX, optarg);
+          printf("mount_point = %s\n", mnt_path);
+          break;
+
+        case 'p':
+          print_testament_array();
+          break;
+
+        case 'u':
+          if (strnlen(mnt_path, PATH_MAX) == 0) {
+            fprintf(stdout, "\nERROR: -m option missing.");
+            exit(ERROR_OPTIONS);
+          }
+          if (strnlen(chapter_file, PATH_MAX) == 0) {
+            fprintf(stdout, "\nERROR: -c option missing.");
+            exit(ERROR_OPTIONS);
+          }
+          upload(mnt_path, chapter_file);
+          break;
+
+        case 'v':
+          break;
+
+        case 'h':
+        default:
+          fprintf(stdout, usage);
+          exit(EXIT_OK);
+      }
+    }
+
     exit(EXIT_OK);
 }
 
