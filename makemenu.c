@@ -201,7 +201,6 @@ int entries_in_menu(void) {
             entries += *(testament[tst] + book);
         }
     }
-    printf("Number of menu entries required = %d\n", entries);
     return entries;
 }
 
@@ -214,37 +213,37 @@ int mkmnu(struct MENUENTRY *menu) {
 
     entries = entries_in_menu();
 
-    printf("\nentry\tparent\tsubtree\n");
-    printf("Testaments\n");
+    //printf("\nentry\tparent\tsubtree\n");
+    //printf("Testaments\n");
 
     for (tst = 0, entry = 0, index = testament_count + 1; tst <= testament_count; tst++, entry++) {
         menu[entry].parent = 0;
         menu[entry].subtree = __builtin_bswap16(index);
-        printf("%d\t%d\t%d\n", entry, menu[entry].parent, menu[entry].subtree);
+        //printf("%d\t%d\t%d\n", entry, menu[entry].parent, menu[entry].subtree);
         index += *testament[tst];
     }
 
-    printf("\n");
-    printf("Books\n");
+    //printf("\n");
+    //printf("Books\n");
 
     for (tst = 0; tst <= testament_count; tst++) {
         for (book = 1; book <= *testament[tst]; book++, entry++) {
             menu[entry].parent = __builtin_bswap16(tst);
             menu[entry].subtree = __builtin_bswap16(index);
-            printf("%d\t%d\t%d\n", entry, menu[entry].parent, menu[entry].subtree);
+            //printf("%d\t%d\t%d\n", entry, menu[entry].parent, menu[entry].subtree);
             index += *(testament[tst] + book);
         }
     }
 
-    printf("\n");
-    printf("Chapters\n");
+    //printf("\n");
+    //printf("Chapters\n");
 
     for (tst = 0; tst <= testament_count; tst++) {
         for (book = 0; book < *testament[tst]; book++) {
             for (chp = 0; chp < *(testament[tst] + book + 1); chp++, entry++) {
                 menu[entry].parent = __builtin_bswap16(__builtin_bswap16(menu[tst].subtree) + book);
                 menu[entry].subtree = 0;
-                printf("%d\t%d\t%d\n", entry, menu[entry].parent, menu[entry].subtree);
+                //printf("%d\t%d\t%d\n", entry, menu[entry].parent, menu[entry].subtree);
             }
         }
     }
@@ -339,6 +338,83 @@ void copy_files(char *chapter_file, char *mnt_path) {
 }
 
 
+int verify_files(char *chapter_file, char *mnt_path) {
+    char dst_fname[PATH_MAX];
+    char src_fname[PATH_MAX];
+    char filename[FNAME_MAX];
+    FILE *chap_file, *dst_file, *src_file;
+    unsigned int i, chap = 1, file_size;
+    void *file_buffer1 = NULL;
+    void *file_buffer2 = NULL;
+    int count = 0;
+
+    chap_file = fopen(chapter_file, "r");
+    if (NULL == chap_file) {
+        fprintf(stdout, "ERROR, cannot open chapter file %s\n", chapter_file);
+        exit(ERROR_FILE);
+    }
+
+    while (fgets(src_fname, PATH_MAX, chap_file)) {
+        if (src_fname[0] != '#' && ! isspace(src_fname[0])) {
+            if (strncmp(src_fname, bookmark, strlen(bookmark))) {
+                if (strncmp(src_fname, testamentmark, strlen(testamentmark))) {
+                    i = 0;
+                    while (src_fname[++i]) {
+                        if ((src_fname[i] == 0x0a) || (src_fname[i] == 0x0d)) {
+                            src_fname[i] = 0;
+                        }
+                    }
+                    memset(dst_fname, 0, PATH_MAX);
+                    strncpy(dst_fname, mnt_path, PATH_MAX);
+                    snprintf(filename, FNAME_MAX, "%08d", chap++);
+                    strncat(dst_fname, filename, FNAME_MAX);
+                    strncat(dst_fname, ".ogg", 5);
+                    printf("Verifying %s...", dst_fname);
+                    dst_file = fopen(dst_fname, "rb");
+                    if (NULL == dst_file) {
+                        fprintf(stdout, "\nERROR: cannot open SD card file %s\a\n\n", dst_fname);
+                        exit(ERROR_FILE);
+                    }
+                    src_file = fopen(src_fname, "rb");
+                    if (NULL == src_file) {
+                        fprintf(stdout, "\nERROR: cannot open source file %s\a\n\n", src_fname);
+                        exit(ERROR_FILE);
+                    }
+                    fseek(src_file, 0, SEEK_END);
+                    file_size = ftell(src_file);
+                    rewind(src_file);
+                    file_buffer1 = malloc(file_size);
+                    file_buffer2 = malloc(file_size);
+                    if ((NULL == file_buffer1) || (NULL == file_buffer2)) {
+                        fprintf(stdout, "\nERROR: cannot allocate memory for file buffer(s)\a\n\n");
+                        exit(ERROR_MEM);
+                    }
+                    fread(file_buffer1, 1, file_size, src_file);
+                    fread(file_buffer2, 1, file_size, dst_file);
+                    if (memcmp(file_buffer1, file_buffer2, file_size) !=0) {
+                      fprintf(stdout, " FAILED VERIFICATION\n");
+                      count++;
+                    } else {
+                      fprintf(stdout, " OK\n");
+                    }
+                    if (file_buffer1) free(file_buffer1);
+                    if (file_buffer2) free(file_buffer2);
+                    file_buffer1 = NULL;
+                    file_buffer2 = NULL;
+                    if (src_file) fclose(src_file);
+                    src_file = NULL;
+                    if (dst_file) fclose(dst_file);
+                    dst_file = NULL;
+                }
+            }
+        }
+    }
+
+    if (chap_file) fclose(chap_file);
+    return count;
+}
+
+
 void check_chapters(char* chapter_file) {
     unsigned long tot_size;
     uint32_t unopenable_files = 0;
@@ -373,22 +449,6 @@ void upload(char* mnt_path, char* chapter_file) {
     strncpy(menu_path, mnt_path, PATH_MAX);
     strncat(menu_path, MENU_FILE_NAME, PATH_MAX);
 
-    {   /*create dir when it does not exist*/
-        DIR *dirh;
-        dirh = opendir(mnt_path);
-        if (dirh == NULL) {
-#ifdef WINDOWS
-            if(mkdir(mnt_path) == -1) {
-#else
-            if(mkdir(mnt_path, S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) == -1) {
-#endif
-                printf("\nERROR: Cannot create directory %s\n", mnt_path);
-                exit(ERROR_FILE);
-            }
-        }
-        else closedir(dirh);
-    }
-
     menu = malloc(sizeof(struct MENUENTRY) * entries_in_menu());
     if (NULL == menu) {
         fprintf(stdout, "\nERROR: cannot allocate memory for menu.\n");
@@ -399,7 +459,7 @@ void upload(char* mnt_path, char* chapter_file) {
     printf("Size of MENU_FILE_NAME is %d\n", menu_size);
 
     menu_file = fopen(menu_path, "wb");
-    if (menu_file == NULL) {    
+    if (menu_file == NULL) {
         fprintf(stdout, "\nERROR: cannot open %s\n", menu_path);
         exit(ERROR_FILE);
     }
@@ -417,12 +477,72 @@ void upload(char* mnt_path, char* chapter_file) {
     printf("Done copying files to SD card.\n");
 
     if (menu) free(menu);
+}
 
-    for (tst = 0; tst <= testament_count; tst++)
-    {
-        if(testament[tst]) free(testament[tst]);
+
+void verify(char* mnt_path, char* chapter_file) {
+    size_t path_length;
+    char menu_path[PATH_MAX] = { 0 };
+    struct MENUENTRY *menu, *menu_from_file;
+    int tst, menu_size, count;
+    FILE *menu_file;
+
+    check_chapters(chapter_file);
+
+    path_length = strnlen(mnt_path, PATH_MAX);
+    if (path_length > PATH_MAX - strlen(MENU_FILE_NAME) - 3) {
+      fprintf(stdout, "\nERROR: Path length for mount point is too long.");
+      exit(ERROR_PATH_LENGTH);
     }
-    if (testament) free(testament);
+
+    if (mnt_path[path_length - 1] != SLASH) {
+        mnt_path[path_length] = SLASH;
+        mnt_path[path_length + 1] = 0;
+    }
+
+    strncpy(menu_path, mnt_path, PATH_MAX);
+    strncat(menu_path, MENU_FILE_NAME, PATH_MAX);
+
+    menu = malloc(sizeof(struct MENUENTRY) * entries_in_menu());
+    if (NULL == menu) {
+        fprintf(stdout, "\nERROR: cannot allocate memory for menu.\n");
+        exit(ERROR_MEM);
+    }
+
+    menu_from_file = malloc(sizeof(struct MENUENTRY) * entries_in_menu());
+    if (NULL == menu_from_file) {
+        fprintf(stdout, "\nERROR: cannot allocate memory for menu_from_file.\n");
+        exit(ERROR_MEM);
+    }
+
+    menu_size = mkmnu(menu);
+    printf("Size of MENU_FILE_NAME is %d\n", menu_size);
+
+    menu_file = fopen(menu_path, "r");
+    if (menu_file == NULL) {
+        fprintf(stdout, "\nERROR: cannot open %s\n", menu_path);
+        exit(ERROR_FILE);
+    }
+    fclose(menu_file);
+
+    printf("Number of chapter files is %d\n", num_chaps());
+
+    menu_file = fopen(menu_path, "r");
+    fread(menu_from_file, 1, menu_size, menu_file);
+    fclose(menu_file);
+
+    if (memcmp(menu, menu_from_file, menu_size) != 0) {
+      fprintf(stdout, "\nWARNING: menu file generated from %s and menu file read from %s differ.\n", chapter_file, menu_file);
+    }
+
+    if ((count = verify_files(chapter_file, mnt_path)) == 0) {
+      printf("\nAll files verified successfully.\n");
+    } else {
+      printf("\n%d file(s) failed verification.\n", count);
+    }
+
+    if (menu) free(menu);
+    if (menu_from_file) free(menu_from_file);
 }
 
 
@@ -430,9 +550,9 @@ void upload(char* mnt_path, char* chapter_file) {
 int main(int argc, char *argv[]) {
     char mnt_path[PATH_MAX] = { 0 };
     char chapter_file[PATH_MAX] = { 0 };
-    int option;
+    int option, tst;
 
-    const char *usage = "Usage... \nUpload with:\nmakemenu -c <chapter_file> -m <mount_point> -u\n\nVerify with:\nmakemenu -c <chapter_file> -m <mount_point> -v\n";
+    const char *usage = "Upload with:\nmakemenu -c <chapter_file> -m <mount_point> -u\n\nVerify with:\nmakemenu -c <chapter_file> -m <mount_point> -v\n\nOther options:\n-p (print testament array)\n-b (print build date)\n";
 
     if (argc < 2) {
         fprintf(stdout, usage);
@@ -461,17 +581,26 @@ int main(int argc, char *argv[]) {
 
         case 'u':
           if (strnlen(mnt_path, PATH_MAX) == 0) {
-            fprintf(stdout, "\nERROR: -m option missing.");
+            fprintf(stdout, "\nERROR: -m option missing.\n");
             exit(ERROR_OPTIONS);
           }
           if (strnlen(chapter_file, PATH_MAX) == 0) {
-            fprintf(stdout, "\nERROR: -c option missing.");
+            fprintf(stdout, "\nERROR: -c option missing.\n");
             exit(ERROR_OPTIONS);
           }
           upload(mnt_path, chapter_file);
           break;
 
         case 'v':
+          if (strnlen(mnt_path, PATH_MAX) == 0) {
+            fprintf(stdout, "\nERROR: -m option missing.\n");
+            exit(ERROR_OPTIONS);
+          }
+          if (strnlen(chapter_file, PATH_MAX) == 0) {
+            fprintf(stdout, "\nERROR: -c option missing.\n");
+            exit(ERROR_OPTIONS);
+          }
+          verify(mnt_path, chapter_file);
           break;
 
         case 'h':
@@ -480,6 +609,12 @@ int main(int argc, char *argv[]) {
           exit(EXIT_OK);
       }
     }
+
+    for (tst = 0; tst <= testament_count; tst++)
+    {
+        if(testament[tst]) free(testament[tst]);
+    }
+    if (testament) free(testament);
 
     exit(EXIT_OK);
 }
