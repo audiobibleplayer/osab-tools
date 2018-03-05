@@ -20,12 +20,16 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <errno.h>
 #include <stdint.h>
 #include <dirent.h>
 
 /* Max characters in base filename (without extension) */
-#define FNAME_MAX 10
+#define BASE_FNAME_MAX 10
+
+/* Max characters in filename with extension */
+#define EXT_FNAME_MAX 13
 
 /* Max characters in path to menu.mnu */
 //#define PATH_MAX 4096 // defined in linux/limits.h
@@ -254,14 +258,14 @@ int mkmnu(struct MENUENTRY *menu) {
 
 void touch_files(unsigned int num_files, char *mnt_path) {
     unsigned int chap;
-    char path_to_file[PATH_MAX], filename[FNAME_MAX];
+    char path_to_file[PATH_MAX], filename[BASE_FNAME_MAX];
     FILE *chap_file;
 
     for (chap = 1; chap <= num_files; chap++) {
         memset(path_to_file, 0, PATH_MAX);
         strncpy(path_to_file, mnt_path, PATH_MAX);
-        snprintf(filename, FNAME_MAX, "%08d", chap);
-        strncat(path_to_file, filename, FNAME_MAX);
+        snprintf(filename, BASE_FNAME_MAX, "%08d", chap);
+        strncat(path_to_file, filename, BASE_FNAME_MAX);
         strncat(path_to_file, ".ogg", 5);
         chap_file = fopen(path_to_file, "wbx");
         if (NULL == chap_file) {
@@ -276,7 +280,7 @@ void touch_files(unsigned int num_files, char *mnt_path) {
 void copy_files(char *chapter_file, char *mnt_path) {
     char dst_fname[PATH_MAX];
     char src_fname[PATH_MAX];
-    char filename[FNAME_MAX];
+    char filename[BASE_FNAME_MAX];
     FILE *chap_file, *dst_file, *src_file;
     unsigned int i, chap = 1, file_size;
     void *file_buffer = NULL;
@@ -299,8 +303,8 @@ void copy_files(char *chapter_file, char *mnt_path) {
                     }
                     memset(dst_fname, 0, PATH_MAX);
                     strncpy(dst_fname, mnt_path, PATH_MAX);
-                    snprintf(filename, FNAME_MAX, "%08d", chap++);
-                    strncat(dst_fname, filename, FNAME_MAX);
+                    snprintf(filename, BASE_FNAME_MAX, "%08d", chap++);
+                    strncat(dst_fname, filename, BASE_FNAME_MAX);
                     strncat(dst_fname, ".ogg", 5);
                     printf("Copying from %s to %s\n", src_fname, dst_fname);
                     dst_file = fopen(dst_fname, "wb");
@@ -338,15 +342,35 @@ void copy_files(char *chapter_file, char *mnt_path) {
 }
 
 
+struct dirent *get_next_direntry(DIR *dirp) {
+  struct dirent *direntry;
+  direntry = readdir(dirp);
+  if (direntry == NULL) return NULL;
+  while ((direntry->d_ino == 1) ||
+    (strncmp(direntry->d_name, "menu.mnu", strlen("menu.mnu")) == 0)) {
+      direntry = readdir(dirp);
+  }
+  return direntry;
+}
+
+
 int verify_files(char *chapter_file, char *mnt_path) {
     char dst_fname[PATH_MAX];
     char src_fname[PATH_MAX];
-    char filename[FNAME_MAX];
     FILE *chap_file, *dst_file, *src_file;
     unsigned int i, chap = 1, file_size;
     void *file_buffer1 = NULL;
     void *file_buffer2 = NULL;
     int count = 0;
+    struct dirent *direntry;
+    DIR *dirp;
+
+    dirp = opendir(mnt_path);
+
+    if (dirp == NULL) {
+      fprintf(stdout, "ERROR attempting to open directory %s\n", mnt_path);
+      exit(ERROR_FILE);
+    }
 
     chap_file = fopen(chapter_file, "r");
     if (NULL == chap_file) {
@@ -366,9 +390,12 @@ int verify_files(char *chapter_file, char *mnt_path) {
                     }
                     memset(dst_fname, 0, PATH_MAX);
                     strncpy(dst_fname, mnt_path, PATH_MAX);
-                    snprintf(filename, FNAME_MAX, "%08d", chap++);
-                    strncat(dst_fname, filename, FNAME_MAX);
-                    strncat(dst_fname, ".ogg", 5);
+                    direntry = get_next_direntry(dirp);
+                    if (direntry == NULL) {
+                        fprintf(stdout, "\nERROR: end of target directory %s before end of source files \a\n\n", mnt_path);
+                        exit(ERROR_FILE);
+                    }
+                    strncat(dst_fname, direntry->d_name, EXT_FNAME_MAX);
                     printf("Verifying %s...", dst_fname);
                     dst_file = fopen(dst_fname, "rb");
                     if (NULL == dst_file) {
@@ -411,6 +438,12 @@ int verify_files(char *chapter_file, char *mnt_path) {
     }
 
     if (chap_file) fclose(chap_file);
+
+    if (closedir(dirp)) {
+      printf("ERROR closing directory handle for %s\n", mnt_path);
+      exit(ERROR_FILE);
+    }
+
     return count;
 }
 
