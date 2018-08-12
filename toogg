@@ -1,0 +1,64 @@
+#!/bin/bash
+#
+# toogg - wav/mp3/wma to ogg conversion for
+#         OSAB - the Open Source Audio Bible player
+#
+# Copyright (C) 2012-2017 Theophilus (http://audiobibleplayer.org)
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+DIR=`basename $PWD`
+
+echo -e "Working in directory $DIR\n"
+
+read -e -p "Please enter the type of source file: flac, wav, mp3 or wma: " -i "mp3" TYPE
+echo -e "File type is $TYPE\n"
+
+if [[ -d $TYPE ]]; then
+	echo -e "Directory $TYPE already exists - make sure that it contains all the $TYPE files that you want to convert.\n"
+else
+	echo -e "Making directory $TYPE...\n"
+	mkdir $TYPE
+	echo -e "Please copy all the $TYPE source files to the directory $TYPE.\n"
+fi
+
+echo -e "Press enter to continue..."
+read KEY
+
+if [[ -d ogg ]]; then
+	echo -e "Warning - ogg directory already exists.\nContents may be overwritten if you continue.\nPress enter to continue or Ctrl-C to quit."
+	read KEY
+else
+	mkdir ogg
+fi
+
+read -e -p "Enter the desired sample rate for the ogg files (e.g. 22050): " -i "44100" RATE
+
+read -e -p "Enter number of channels for the ogg files (1 for mono or 2 for stereo): " -i "1" CHANNELS
+
+read -e -p "Enter quality factor for ogg files (-1 for lowest up to 10 for highest): " -i "3" QUALITY
+
+echo -e "\nConverting the $TYPE files to $RATE sample/sec $CHANNELS channel ogg files at quality factor $QUALITY...\n"
+
+cd $TYPE
+
+for FILE in `ls *.$TYPE`; do
+	#ffmpeg -i $FILE -acodec libvorbis -aq $QUALITY -ar $RATE -ac $CHANNELS  -af "compand=attacks=0.3:decays=0.8:points=-70/-70 -60/-20:soft-knee=0.01:gain=0:volume=0:delay=0.8"      ../ogg/`echo $FILE|sed -e "s/$TYPE/ogg/"`
+	ffmpeg -i $FILE -vn -acodec libvorbis -aq $QUALITY -ar $RATE -ac $CHANNELS ../ogg/`echo $FILE|sed -e "s/$TYPE/ogg/"`
+done
+
+cd ../ogg
+
+echo -e "Applying Replay Gain...\n"
+vorbisgain *.ogg
+
+echo -e "\nCalculating MD5 checksums...\n"
+md5sum *.ogg | tee MD5SUM
+
+echo -e "\n\nDONE!"
+

@@ -1,0 +1,164 @@
+#!/usr/bin/perl
+#
+# upload - Uploads files to flash memory cards for
+#          OSAB - the Open Source Audio Bible player
+#
+# Copyright (C) 2012-2018 Theophilus (http://audiobibleplayer.org)
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+use File::Copy;
+
+if ($#ARGV < 0) {
+    die "usage: upload <device_name> <content_file> \nwhere device_name is the name assigned to the device by the kernel, e.g. sdb, and\ncontent_file is the content index file that lists all the chapter files to be uploaded to the microSD card.\n";
+}
+
+my $kname = $ARGV[0];
+my $chapfile = $ARGV[1];
+
+#open(STDOUT, ">", "/tmp/$kname-stdout.txt")
+#								or die "cannot open /tmp/$kname-stdout.txt: $!";
+#open(STDERR, ">", "/tmp/$kname-stderr.txt")
+#								or die "cannot open /tmp/$kname-stderr.txt: $!";
+
+if (! -e $chapfile) {
+    die "$chapfile does not exist.  $!";
+}
+
+$mounted = `grep $kname /etc/mtab`;
+
+if ($mounted) {
+    print "/dev/$kname is mounted.\n";
+    print "Unmounting /dev/$kname...\n";
+    &umount();
+} else {
+    print "/dev/$kname is NOT mounted.\n";
+}
+
+my $cmd = "/sbin/blockdev --getsz /dev/$kname";
+my $size = `$cmd`;
+chomp($size);
+my $card_size = $size * 512;
+
+print "Kernel name = $kname\n";
+print "Chapter file = $chapfile\n";
+print "Card size = $card_size bytes\n";
+
+if ($kname eq "sda") {
+    print "\n\nWARNING: $kname is usually the first system hard drive.  If that is the case, then uploading to this drive will destroy the operating system and all the data on this hard drive!";
+
+    do {
+      print "\n\nAre you sure that you want to write to $kname? (yes/no): ";
+      chomp($user_input = <STDIN>);
+      if ($user_input eq "no") {
+        print "Quitting!\n";
+        exit;
+      }
+    } while ($user_input ne "yes");
+}
+
+open FILE, $chapfile or die $!;
+
+my $totalsize = 0;
+my $numfiles = 0;
+my $availablespace = 0;
+my $result;
+
+while (<FILE>) {
+    chomp;
+    if (-f $_) {
+        $totalsize += (-s $_);
+        $numfiles++;
+    }
+}
+
+print "Total size of all files: $totalsize bytes\n";
+
+if (-b "/dev/$kname") {
+    my $reserved;
+    my $rootpos = 8192;
+    if ($size < 4194304) {
+        $reserved = $rootpos-($size-$rootpos+(4097<<5)>>17<<6);
+        $availablespace = ($size-$rootpos)*512 - ($numfiles/64)*1048576 - 4*65536;
+        `/sbin/mkfs.vfat -I -s 32 -F 32 -R $reserved /dev/$kname`;
+    } else {
+        do {
+            $reserved = $rootpos-($size-$rootpos+(8193<<6)>>19<<7);
+            $rootpos += 8192;
+        }while($reserved <= 0);
+        $availablespace = ($size-$rootpos-8192)*512 - ($numfiles/32)*1048576 - 4*65536;
+        `/sbin/mkfs.vfat -I -s 64 -R $reserved /dev/$kname`;
+    }
+
+    print "Available space on card: $availablespace bytes\n";
+
+    if ($totalsize > $availablespace) {
+        print "Not enough space on card for all these files!\n";
+        exit;
+    }
+
+    my $label = substr($chapfile, 0, 11);
+
+    $result = `/sbin/dosfslabel /dev/$kname $label`;
+    print $result;
+
+    $result = `/bin/sudo /bin/mkdir /mnt/$kname`;
+    print $result;
+
+    $result = `/bin/sudo /bin/mount /dev/$kname /mnt/$kname`;
+    print $result;
+
+    print "\nUploading files to microSD card...\n";
+
+    my $starttime = time;
+
+    open my $result_fh, "/bin/sudo /usr/local/bin/makemenu -c $chapfile -m /mnt/$kname -u|";
+    while (<$result_fh>) {
+        print $_;
+    }
+    close $result_fh;
+
+    my $endtime = time;
+
+    &umount();
+
+    $result = `/bin/sudo /bin/rmdir /mnt/$kname`;
+    print $result;
+
+    my $writespeed;
+    my $timediff = $endtime - $starttime;
+    print "Time difference is $timediff\n";
+    if ($timediff > 0) { $writespeed = $totalsize/$timediff/1024/1024; }
+    print "Wrote $totalsize bytes in $timediff seconds\n";
+    printf("Average write speed: %.1f MB/s\n", $writespeed);
+
+} else {
+    print "/dev/$kname is NOT a valid block special file!\n";
+}
+
+
+sub umount {
+    $result = `/bin/sudo /bin/umount /dev/$kname`;
+    print $result;
+    if ($?) {
+        print "Failed to unmount /dev/$kname... will try again in 10 sec...\n";
+        sleep 10;
+        $result = `/bin/sudo /bin/umount /dev/$kname`;
+        print $result;
+        if ($?) {
+            print "Failed to unmount /dev/$kname... QUITTING!\n";
+            exit;
+        } else {
+            print "Managed to unmount /dev/$kname on the second attempt\n";
+        }
+    } else {
+        print "Managed to unmount /dev/$kname on the first attempt\n";
+    }
+}
+
+#close STDOUT;
+#close STDERR;

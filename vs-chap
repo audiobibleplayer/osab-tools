@@ -1,0 +1,60 @@
+#!/usr/bin/perl
+# vs-chap - Generates chapter.txt file for narrations for
+#           OSAB - the Open Source Audio Bible player
+#
+# Copyright (C) 2001-2017 Theophilus (http://audiobibleplayer.org)
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+use File::Find::Rule;
+use Cwd 'abs_path';
+
+my $ext = "ogg|tab";
+
+if ($#ARGV < 0) {
+    print "usage: vs-chap <directory_name_1> <directory_name_2> <directory_name_3> ...\n";
+    exit;
+}
+
+#my $filename = join("_", @ARGV);
+#$filename =~ s?/??g;
+my $filename = "content";
+
+open($chap_file, ">", "$filename.txt") || die "Cannot open $filename.txt: $!\n";
+
+print "Writing to $filename.txt\n";
+
+foreach(@ARGV) {
+    my @subdirs = File::Find::Rule->directory->in($_);
+    foreach(@subdirs) {
+        my $sdir = $_;
+        my $abspath = abs_path($sdir);
+        my @files = File::Find::Rule->file()
+                                    ->name(qr/\.($ext)$/)
+                                    ->maxdepth(1)
+                                    ->relative
+                                    ->in($sdir);
+
+        my $numfiles = @files;
+
+        my $book;
+        my $chap;
+
+        foreach (sort(@files)) {
+            ($book, $chap) = ($_ =~ /^(\d+)\D{1}.*\D{1}(\d+)\.($ext)/);
+
+            print $chap_file "\nTESTAMENT\n" if $chap == 1 &&
+                                        ($book == 1 || $book==19 || $book==40);
+            print $chap_file "\nBOOK\n" if $chap == 1;
+            print $chap_file "\nBOOK\n" if $chap % 30 == 0 && $book == 19 && $chap <150;
+            print $chap_file "$abspath/$_\n";
+        }
+    }
+}
+
+close $chap_file;
