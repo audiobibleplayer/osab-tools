@@ -81,18 +81,14 @@ print "Total size of all files: $totalsize bytes\n";
 if (-b "/dev/$kname") {
     my $reserved;
     my $rootpos = 8192;
+    my $SectorsPerCluster = 64;
     if ($size < 4194304) {
-        $reserved = $rootpos-($size-$rootpos+(4097<<5)>>17<<6);
+        $SectorsPerCluster = 32;
         $availablespace = ($size-$rootpos)*512 - ($numfiles/64)*1048576 - 4*65536;
-        `/sbin/mkfs.vfat -I -s 32 -F 32 -R $reserved /dev/$kname`;
     } else {
-        do {
-            $reserved = $rootpos-($size-$rootpos+(8193<<6)>>19<<7);
-            $rootpos += 8192;
-        }while($reserved <= 0);
         $availablespace = ($size-$rootpos-8192)*512 - ($numfiles/32)*1048576 - 4*65536;
-        `/sbin/mkfs.vfat -I -s 64 -R $reserved /dev/$kname`;
     }
+    `/sbin/mkfs.vfat -I -s $SectorsPerCluster -F 32 /dev/$kname`;
 
     print "Available space on card: $availablespace bytes\n";
 
