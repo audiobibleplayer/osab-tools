@@ -2,7 +2,7 @@
  * makemenu.c - make menu.mnu from audio files for
  *              OSAB - the Open Source Audio Bible player
  *
- * Copyright (C) 2001-2018 Theophilus (http://audiobibleplayer.org)
+ * Copyright (C) 2001-2020 Theophilus (http://theaudiobible.org)
  *
  * Parts of this code are derived from VLSI's audio book sample code - http://vlsi.fi
  *
